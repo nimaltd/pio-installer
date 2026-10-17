@@ -1,0 +1,15 @@
+# What demo needs. It goes into lib/ beside demo, where PlatformIO finds it.
+
+name: helper
+description: Forty, for demo to build on
+repository: https://github.com/nimaltd/pio-installer
+license: Apache-2.0
+
+install:
+  layout: mirror
+
+files:
+  headers:
+    - src/helper.h
+  sources:
+    - src/helper.c

@@ -1,0 +1,28 @@
+# The library CI installs into test/e2e/app with the wheel it just built, then
+# builds and runs on PlatformIO's native platform.
+
+name: demo
+description: A library for the end to end test
+repository: https://github.com/nimaltd/pio-installer
+license: Apache-2.0
+
+requires:
+  pio_installer: 1.0.0
+  libraries:
+    - helper
+
+install:
+  layout: mirror
+  defines:
+    - DEMO_ON=1
+
+files:
+  headers:
+    - src/demo.h
+    - src/demo_config.h
+    - src/port/demo_port.h
+  sources:
+    - src/demo.c
+
+pio:
+  platforms: [native]
