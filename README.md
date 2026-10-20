@@ -192,7 +192,7 @@ A library can need something made that no file can carry, such as a key made fre
 ```
 Run
   make-key     Make the device's key, device.key
-               python scripts/make_key.py device.key
+               python tools/make_key.py device.key
                Run it? [Y/n]:
 ```
 
@@ -356,7 +356,7 @@ A repository of an organisation can need one more step: an organisation that ask
 
 Put an `installer.yml` at the root of the repository. Any library can have one, whoever wrote it, and the one file serves pio-installer and the other installers alike: each reads its own keys and leaves the others' alone.
 
-Every key pio-installer reads is below, each with what it does. Only `name` and `files` are required; leave out what your library does not need. For a working one to copy, see [pio-installer-example](https://github.com/nimaltd/pio-installer-example).
+Every key pio-installer reads is below, each with what it does, as a manifest asking for 2.1.0 writes it. Only `name` and its `headers` or `sources` are required; leave out what your library does not need. What changed in 2.1.0, and how a manifest from before reads, is under [Paths, from 2.1.0](#paths-from-210). For a working one to copy, see [pio-installer-example](https://github.com/nimaltd/pio-installer-example).
 
 ```yaml
 name: example                      # the library's name, and its folder in lib/
@@ -372,7 +372,7 @@ category: storage                  # sensor, storage, display, communication, wi
 provides: []                       # what it gives other libraries: [rtos] for an RTOS
 
 requires:
-  pio_installer: 2.0.0             # the oldest pio-installer that reads this file
+  pio_installer: 2.1.0             # the oldest pio-installer that reads this file
   libraries:                       # other libraries, installed first into lib/
     - osal >= 1.0.0                # no owner means nimaltd
     - owner/lib                    # anyone else's, as owner/name
@@ -385,45 +385,46 @@ requires:
       note: 400 kHz                # how to set it up
 
 install:
-  layout: mirror                   # mirror keeps the repository's folders,
-                                   # flat (the default) puts every file at the top
   include_dirs: [src, src/port]    # include folders, only when the guess is wrong:
                                    # the first is library.json's includeDir
   defines:                         # build_flags in platformio.ini, for every environment
     - EXAMPLE_FAST                 # NAME, or NAME=value
 
-files:
-  headers:                         # .h files; the first is the one to #include
-    - src/example.h
-    - src/example_config.h         # its settings, in USER CODE lines kept on update
-  sources:                         # .c and .cpp files, the only ones PlatformIO builds
-    - src/example.c
-    - from: src/port/spi.c         # a file that goes somewhere of its own,
-      to: src/port/spi.c           # whatever the layout says
+headers:                           # .h files; the first is the one to #include
+  - src/example.h                  # every file keeps its path: lib/example/src/example.h
+  - src/example_config.h           # its settings, in USER CODE lines kept on update
+sources:                           # .c and .cpp files, the only ones PlatformIO builds
+  - src/example.c
+  - src/port/*.c                   # a wildcard, matched the way a shell would:
+                                   # * inside one folder, ** across any number of them
+  - from: extra/spi.c              # a file that goes somewhere of its own,
+    to: src/port/spi.c             # in the library's folder
 
 options:                           # parts the user chooses at install
   uptime:                          # the name typed after --with
     description: Uptime in hours, minutes and seconds  # the question asked
     libraries: []                  # libraries this part needs, installed first
-    files:                         # its files, written like files above
-      sources:
-        - src/example_uptime.c
+    sources:                       # its files, written like headers and sources above
+      - src/example_uptime.c
 
 extras:                            # copied as they are, never compiled
   - LICENSE.md                     # LICENSE.md and NOTICE are the default,
   - NOTICE                         # so leave this out if that is all
-  - README.md
+  - README.md                      # in the library's folder
+  - root: tools                    # 2.1.0: tools/ into the project's folder instead, as
+                                   # the library's own, written again on every install
 
 once:                              # the project's own files: made when missing,
                                    # then the user's, never replaced or removed
-  - from: config/partitions.csv    # the file in the repository, to the project's folder
-  - from: templates/secrets.h      # to: its place in the project, when not its name
+  - partitions.csv                 # 2.1.0: a path alone lands at that path: partitions.csv
+  - from: templates/secrets.h      # to: another place in the project
     to: include/example_secrets.h
 
 run:                               # steps run once the files are in, each asked about first
   - label: make-key                # the name typed after --run
     description: Make the device's key, device.key  # shown with the question
-    script: scripts/make_key.py    # Python, run with the installer's own Python,
+    script: tools/make_key.py      # Python, run with the installer's own Python, from the
+                                   # project's folder, or {library}/... in the library's
     args: [device.key]             # or command: [program, arguments], with no shell
     unless: device.key             # skipped when this file is in the project already
 
@@ -446,18 +447,49 @@ In YAML, `*` alone starts something else, so write any as `"*"` or `["*"]`, or l
 
 A library that uses anything 2.0.0 brings says `requires.pio_installer: 2.0.0`: `once` files in the project's folder, `run`, or a library it needs given with an `@` or a `manifest`. The version also decides where `once` files go. A manifest asking for 2.0.0 or newer puts them in the project's folder, and one asking for less keeps the meaning it was written for, the library's own folder, so a release tagged before 2.0.0 still installs and builds as it did.
 
+### Paths, from 2.1.0
+
+A manifest asking for `requires.pio_installer: 2.1.0` has one rule for every path that names a place in the project's folder: it starts at the project's folder. `{library}` at its start names the library's own folder instead, wherever `--dir` put it. A path that names a file of the library, under `headers`, `sources`, `extras` or `once`, or as a `from`, is a path in the repository, as always.
+
+And every file is copied to the path it has, unchanged, unless a `to` says otherwise, so a path alone is all an entry needs: `src/example.c` lands at `src/example.c` in the library's folder, so `install.layout` is gone, `flat` is refused and `mirror` says nothing new. A `once` file lands at its own path in the project's folder: `- config/partitions.csv` at `config/partitions.csv`, where before 2.1.0 it was written `- from: config/partitions.csv` and took only its name. And `headers` and `sources` need no `files` around them; `files` still reads, but not both at once.
+
+A `to` gives a file another place, where its list puts files. Under `headers`, `sources` and `extras` that is the library's folder, so `- from: src/example.h, to: example.h` lands at the top of it, and the include path follows. Under `once` it is the project's folder, where every `once` file lands. A `root` puts an extra in the project's folder instead of the library's: `- root: tools` takes the library's `tools/` to the project's `tools/`. Code has no `root`, since it is built in the library's folder, and a `once` file needs none. Wherever a `from` would be the same path as its `to` or `root`, leave it out: `- root: tools` is `- from: tools, root: tools`.
+
+| Key | Starts at |
+|---|---|
+| `headers`, `sources`, `extras`, `once`, `from` | the library's repository |
+| `to` under `headers`, `sources` and `extras` | the library's folder |
+| `once.to`, `extras.root` | the project's folder |
+| `run.script`, `run.unless` | the project's folder, or the library's with `{library}/` |
+| `{library}` in `run.args` and `run.command` | the library's folder, as the step names it from the project's folder |
+
+An extra with a `root` lands in the project's folder, as the library's own: a file at `root` itself, the files of a folder under it with their path below it, those a wildcard matches under it with their names; an extra's `to` places them the same way in the library's folder. It is written again on every install, a file of it the new version no longer ships is removed, and an uninstall takes it out. A file already there that the installer did not put there is the user's, and is never written over: the install stops and says so.
+
+In every manifest, a wildcard matches the whole path, the way a shell does, and the same whether the library comes from GitHub or a folder: `*` and `?` stay inside one folder, `**` crosses any number of them, none included, and `[ab]` is one of a set. So `*.c` is the `.c` files at the top, `src/*.c` those in `src`, and `src/**/*.c` every one below `src`, however deep. And two files of the code that would land in one place, such as two `util.c` that `flat` put side by side, are refused when the manifest is read, where the second used to replace the first without a word.
+
+```yaml
+extras:
+  - root: tools                    # tools/keygen.py and tools/keygen.md, into the project's folder
+run:
+  - label: signing-key
+    script: tools/keygen.py        # from the project's folder
+    unless: sign_key.pem
+```
+
+A step's script has to be one the install puts in place, an extra with a `root` or a `once` file, or with `{library}`, a file of the library's folder; anything else is refused when the manifest is read. A manifest asking for less than 2.1.0 keeps the meaning it was written for: its script is found in the library as it was fetched, and `{library}` is left as it is written.
+
 ### Files of the project's own
 
 A file that belongs to the project rather than to the library goes under `once`: a partition table, a file of secrets for the user to fill in. It is created in the project's folder when it is missing, and is the user's from then on: never replaced by an update, never removed by an uninstall.
 
 ```yaml
 once:
-  - from: config/partitions.csv        # to: the file's own name, partitions.csv
+  - partitions.csv                     # lands at partitions.csv, its own path
   - from: templates/secrets.h
     to: include/example_secrets.h      # a folder inside the project is fine
 ```
 
-`from` is a file of the library's repository, and `to` its place from the project's folder, its own name when left out. Each is checked before anything is written: `to` stays inside the project, is neither `platformio.ini` nor the record, and does not point into the library's own folder, which every install replaces. Two entries with one `to` are refused. And `from`, like every file a manifest names, stays inside the library: no `..`, no absolute path, no link leading out of it.
+From 2.1.0 a path alone is a file of the library's repository, landing at the same path in the project. A file that goes somewhere else names it with `from`, the file in the repository, and `to`, its place from the project's folder. Before 2.1.0 each entry is a mapping with a `from`, and a `to` left out meant its own name, at the top. A `once` file has no `root`: it always lands in the project's folder. Each is checked before anything is written: `to` stays inside the project, is neither `platformio.ini` nor the record, and does not point into the library's own folder, which every install replaces. Two entries with one `to` are refused. And `from`, like every file a manifest names, stays inside the library: no `..`, no absolute path, no link leading out of it.
 
 Settings belong in the configuration header's USER CODE lines, not in `once`, which is for files outside the library.
 
@@ -466,17 +498,19 @@ Settings belong in the configuration header's USER CODE lines, not in `once`, wh
 Something no file can carry, such as a key made fresh for each device, is made by a step under `run`. It runs once the library's files are in, in the project's folder:
 
 ```yaml
+extras:
+  - root: tools                        # tools/make_key.py, into the project's folder
 run:
   - label: make-key
     description: Make the device's key, device.key
-    script: scripts/make_key.py
+    script: tools/make_key.py          # the project's tools/make_key.py
     args: [device.key]
     unless: device.key
 ```
 
 - `label` names the step, typed after `--run`, in lower case letters, digits, `_` and `-`.
 - `description` is shown with the question.
-- `script` is a Python file of the library, run with the installer's own Python, so it works on every computer the installer does. Or `command`, a program and its arguments as a list, `[openssl, rand, -out, device.key, "32"]`, run as it is, with no shell. One of the two, never both.
+- `script` is a Python file, run with the installer's own Python, so it works on every computer the installer does. From 2.1.0 it is a path from the project's folder, where an extra with a `root` or a `once` file put it, or `{library}/...` in the library's folder, see [Paths, from 2.1.0](#paths-from-210); before, it is a file of the library's repository. Or `command`, a program and its arguments as a list, `[openssl, rand, -out, device.key, "32"]`, run as it is, with no shell. One of the two, never both.
 - `args` are added after either.
 - `unless` names a file the step makes, from the project's folder. When it is there, the step is skipped without a question.
 
@@ -509,7 +543,7 @@ Without an `@`, a library comes from its repository's default branch. The last f
 - **A define in `install.defines` only when the whole build needs it.** It goes into every environment of the project. A setting that only the library reads belongs in its configuration header.
 - **`frameworks` and `platforms` that are true.** Listing too few hides the library from a build that could use it, and the installer warns about it; listing too many lets a build try and fail.
 
-A library made for PlatformIO that ships its own `library.json`, listed under `extras` or `files` so it is installed, keeps it: the installer writes one only for a library that has none.
+A library made for PlatformIO that ships its own `library.json`, listed under `extras`, `headers` or `sources` so it is installed, keeps it: the installer writes one only for a library that has none.
 
 ---
 

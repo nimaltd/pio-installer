@@ -13,7 +13,7 @@ github.com/nimaltd/core-installer. What a PlatformIO project is, is in pio.py.
 See https://github.com/nimaltd/pio-installer
 """
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 # Before anything of the core is used: it asks the target for every answer
 # that depends on the kind of project.
