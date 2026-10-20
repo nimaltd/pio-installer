@@ -30,6 +30,7 @@ are kept, and a second install adds nothing twice.
 import re
 from pathlib import Path
 
+from .core import blocks
 from .core.files import backup
 from .core.target import ALREADY, CHANGED, MANUAL, Outcome
 
@@ -37,6 +38,11 @@ NAME = "platformio.ini"
 
 MARK_OPEN = "; >>> pio-installer: {name} >>>"
 MARK_CLOSE = "; <<< pio-installer: {name} <<<"
+
+
+def marker(name):
+    """The two lines around a library's block, the core's, with ; as the sign."""
+    return blocks.Marker("pio-installer", name, sign=";")
 
 _SECTION = re.compile(r"^\[([^\]]+)\][ \t]*$")
 _FLAGS = re.compile(r"^build_flags[ \t]*=(.*)$")
@@ -116,9 +122,10 @@ def environments(text):
 
 
 def _block(name, defines, indent):
-    lines = [indent + MARK_OPEN.format(name=name)]
+    found = marker(name)
+    lines = [indent + found.open]
     lines += [f"{indent}-D{define}" for define in defines]
-    lines.append(indent + MARK_CLOSE.format(name=name))
+    lines.append(indent + found.close)
 
     return lines
 
@@ -136,8 +143,8 @@ def without(lines, name):
     The lines with this library's blocks taken out, and what was there only to
     hold them: a build_flags left with no value, and an [env] left empty.
     """
-    open_mark = MARK_OPEN.format(name=name)
-    close_mark = MARK_CLOSE.format(name=name)
+    open_mark = marker(name).open
+    close_mark = marker(name).close
     kept = []
     inside = False
     held = set()
@@ -243,16 +250,34 @@ def integrate(project_root, library):
                        ["Add these to build_flags of every environment:"]
                        + [f"-D{define}" for define in library.defines])
 
+    # A block with one of its markers missing: whatever was written could
+    # take the user's lines with it, so the file is left as it is.
+    if blocks.spans(text, marker(library.name)) is False:
+        return _half_written(library)
+
     new = updated(text, library.name, library.defines)
+    found = {NAME: blocks.fingerprints(new, [marker(library.name)])} if library.defines else {}
 
     if new == text:
-        return Outcome(NAME, ALREADY, f"{NAME} already has {library.name}'s defines.") if library.defines else None
+        if not library.defines:
+            return None
+
+        return Outcome(NAME, ALREADY, f"{NAME} already has {library.name}'s defines.", blocks=found)
 
     saved = backup(path)
     write(path, new)
     what = f"Added {library.name}'s defines to" if library.defines else f"Took {library.name}'s old defines out of"
 
-    return Outcome(NAME, CHANGED, f"{what} {NAME}, for every environment.", backup=saved)
+    return Outcome(NAME, CHANGED, f"{what} {NAME}, for every environment.", backup=saved, blocks=found)
+
+
+def _half_written(library):
+    """What to say about a block with one of its markers missing, and what to add by hand."""
+    return Outcome(
+        NAME, MANUAL,
+        f"{NAME} has a half written pio-installer block for {library.name}. Fix it by hand first.",
+        ["Then add these to build_flags of every environment:"] + [f"-D{define}" for define in library.defines],
+    )
 
 
 def uninstall(project_root, name):
@@ -263,6 +288,10 @@ def uninstall(project_root, name):
         text = read(path)
     except (OSError, UnicodeDecodeError):
         return None
+
+    if blocks.spans(text, marker(name)) is False:
+        return Outcome(NAME, MANUAL, f"{NAME} has a half written pio-installer block for {name}. "
+                       "Take it out by hand.")
 
     new = updated(text, name, [])
 

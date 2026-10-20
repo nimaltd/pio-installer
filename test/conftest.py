@@ -1,6 +1,7 @@
 """Shared fixtures: a throwaway library repository and a throwaway PlatformIO project."""
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
@@ -24,6 +25,10 @@ from pio_installer.core import cli, download  # noqa: E402
 PLATFORMIO_INI = """[env:native]
 platform = native
 """
+
+
+# No test asks PyPI whether a newer installer is out.
+os.environ["INSTALLER_NO_UPDATE_CHECK"] = "1"
 
 
 @pytest.fixture

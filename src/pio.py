@@ -95,6 +95,10 @@ class PlatformIO(Target):
     def __init__(self, version):
         self.version = version
 
+    def managed_files(self, project_root, library):
+        """platformio.ini, which this edits, and which a once file must never be."""
+        return [self.record_name, ini.NAME]
+
     def default_folder(self, library):
         """Libraries go into lib/, which PlatformIO searches for every framework."""
         return f"{LIB}/{library.name}"
