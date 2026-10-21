@@ -8,29 +8,18 @@ on:
 
 jobs:
   test:
-    name: Tests on Python ${{ matrix.python }}, ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        python: ["3.8", "3.12"]
-
+    name: Tests
+    runs-on: ubuntu-latest
     steps:
-      # With the shared core, a git submodule. Without it nothing imports.
       - uses: actions/checkout@v7
-        with:
-          submodules: true
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: ${{ matrix.python }}
+          python-version: "3.12"
 
       - name: Install
-        run: python -m pip install --upgrade pip pytest PyYAML
+        run: python -m pip install --upgrade pip pytest
 
-      # Windows is in the matrix on purpose: its CRLF files and its paths are
-      # what break first in a path or a platformio.ini.
       - name: Test
         run: python test/run_tests.py
 
@@ -39,8 +28,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: true
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -73,67 +60,3 @@ jobs:
         with:
           name: dist
           path: dist/
-
-  platformio:
-    name: A real PlatformIO build, in two environments, then taken out again
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: true
-
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: dist
-          path: dist/
-
-      # PlatformIO Core from PyPI, at the version the tests were made with. The
-      # native platform builds with the runner's own gcc, so no board is needed.
-      - name: PlatformIO
-        run: python -m pip install platformio==6.2.0
-
-      # The wheel just built, the way a user runs it, with nobody to answer:
-      # demo and helper into lib/. The project then changes demo's setting and
-      # installs again, which has to keep it.
-      - name: Install the demo
-        run: |
-          python -m pip install --no-index dist/*.whl
-          cp -r test/e2e/app "$RUNNER_TEMP/app"
-          cp test/e2e/app/platformio.ini "$RUNNER_TEMP/before.ini"
-          demo="$GITHUB_WORKSPACE/test/e2e/demo"
-          helper="$GITHUB_WORKSPACE/test/e2e/helper"
-          cd "$RUNNER_TEMP/app"
-          pio-installer "$demo" "$helper" < /dev/null
-          sed -i 's/#define DEMO_PLUS                   2/#define DEMO_PLUS                   12/' lib/demo/src/demo_config.h
-          pio-installer "$demo" "$helper" < /dev/null
-          cat platformio.ini lib/demo/library.json lib/demo/src/demo_config.h
-
-      # demo.h stops the build if DEMO_ON did not reach the project's own code,
-      # so a build of both environments shows the defines got to each of them.
-      # 52 is helper's 40 and the 12 the update had to keep.
-      - name: Build and run both environments
-        working-directory: ${{ runner.temp }}/app
-        run: |
-          pio run
-          for env in native plain; do
-            got="$(.pio/build/$env/program)"
-            echo "$env: $got"
-            test "$got" = "demo says 52"
-          done
-
-      # Out again: its files and its library.json go, the setting changed is
-      # saved beside them, and platformio.ini is back to the byte it was.
-      - name: Take demo out
-        working-directory: ${{ runner.temp }}/app
-        run: |
-          pio-installer --uninstall demo < /dev/null
-          test ! -e lib/demo/src/demo.c
-          test ! -e lib/demo/library.json
-          ls lib/demo/src/demo_config.h.*.bak
-          test -e lib/helper/library.json
-          cmp platformio.ini "$RUNNER_TEMP/before.ini"

@@ -1,44 +1,18 @@
 """
-Install embedded C and C++ libraries into a PlatformIO project.
+pio-installer is now lib-installer.
 
-Installed with pip, it is the pio-installer command. It takes a library from
-GitHub, from a downloaded zip, or from a folder, puts it into the project's
-lib folder with a library.json written for it, and gives the whole project
-the defines it needs in platformio.ini. Every framework PlatformIO builds
-with finds it there: Arduino, ESP-IDF, STM32Cube, Zephyr and the rest.
-
-The work that is the same for any project is the shared core, in core/, from
-github.com/nimaltd/core-installer. What a PlatformIO project is, is in pio.py.
-
-See https://github.com/nimaltd/pio-installer
+This last release only says so. lib-installer does what pio-installer did, for
+STM32, Zephyr, ESP-IDF, Arduino and PlatformIO alike, with the same commands:
+https://github.com/nimaltd/lib-installer
 """
 
-__version__ = "2.1.0"
+__version__ = "3.0.0"
 
-# Before anything of the core is used: it asks the target for every answer
-# that depends on the kind of project.
-from .core import target as _target  # noqa: E402
-from .pio import PlatformIO  # noqa: E402
-
-_target.use(PlatformIO(__version__))
-
-from .core.installer import InstallError, Result, install_in_place, install_to  # noqa: E402
-from .core.manifest import Manifest, ManifestError, load  # noqa: E402
-
-__all__ = [
-    "InstallError",
-    "Manifest",
-    "ManifestError",
-    "Result",
-    "install_in_place",
-    "install_to",
-    "load",
-    "main",
-]
+__all__ = ["main"]
 
 
 def main(argv=None):
-    """Run the command line interface. Imported lazily to keep start-up cheap."""
+    """Say where pio-installer went. Returns a process exit code."""
     from .cli import main as _main
 
     return _main(argv=argv)
